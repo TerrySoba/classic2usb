@@ -21,6 +21,7 @@
 #include "usbdrv.h"
 #include "oddebug.h"        /* This is also an example for using debug macros */
 
+#include "bit_tools.h"
 
 #define SLAVE_ADDR 0x52     /* address of classic controller */
 
@@ -95,7 +96,7 @@ uchar rawData[6];
 
 static report_t reportBuffer;
 static uchar    idleRate;   /* repeat rate for keyboards, never used for mice */
-static uchar    startByte = 0;
+// static uchar    startByte = 0;
 
 /* ------------------------------------------------------------------------- */
 
@@ -126,31 +127,22 @@ usbRequest_t    *rq = (void *)data;
 
 /* ------------------------------------------------------------------------- */
 
-#define SET_BIT(X,Y)  X |= (1 << (Y))
-#define CLR_BIT(X,Y)  X &= (~(1 << (Y)))
-#define GET_BIT(X,Y)  (((X) >> (Y)) & 1)
-#define SET_BIT_VALUE(X,Y,V) if (V & 1) SET_BIT(X,Y); else CLR_BIT(X,Y);
 
 
 
 /* I2C initialization */
 void myI2CInit(void) {
-    uchar error = 0;
-
-    // TWBR = 255;
- 
     TWBR = 72; // this equals 100kHz on I2C
 
     // set TWPS = 0;
     CLR_BIT(TWSR, 0);
     CLR_BIT(TWSR, 1);
-
 }
 
 
 
 char myWiiInit(void) {
-    char i;
+
     // enable TWI and send start condition
     TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
 
@@ -358,7 +350,6 @@ char fillReportWithWii(void) {
 
 /* This function sets up stuff */
 void myInit(void) {
-    int i;
     _delay_ms(300);
     SET_BIT(DDRC, 0);
     myI2CInit();
@@ -412,7 +403,7 @@ int main(void)
             DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 
-            /* If the Gamepad starts feeding us 0xff, we heve to restart to recover */
+            /* If the gamepad starts feeding us 0xff, we have to restart to recover */
             if ((rawData[0] == 0xff) && (rawData[1] == 0xff) && (rawData[2] == 0xff) && (rawData[3] == 0xff) && (rawData[4] == 0xff) && (rawData[5] == 0xff)) {
                 goto start;
             }
