@@ -27,7 +27,7 @@
 #include "bit_tools.h"
 #include "twi_func.h"
 
-#include "my_timers.h"
+// #include "my_timers.h"
 
 #define SLAVE_ADDR 0x52     /* address of classic controller */
 
@@ -176,13 +176,9 @@ unsigned char fillReportWithWii(void) {
     // now set structure
     reportBuffer.x = ((rawData[0] & 0x3F))<<2;
     reportBuffer.y = 0xff - (((rawData[1] & 0x3F))<<2);
-    // reportBuffer.debug = ((F_CPU/((1024 * 1000))) * (500));
 
-    
     reportBuffer.Rx = ((((rawData[0] & 0xC0) >> 3) | ((rawData[1] & 0xC0) >> 5) | ((rawData[2] & 0x80) >> 7))) << 3;
     reportBuffer.Ry = 0xff - ((((rawData[2] & 0x1F))) << 3);
-
-    
 
 
 #ifdef WITH_ANALOG_L_R
@@ -265,7 +261,7 @@ void myInit(void) {
     _delay_ms(300);
     // SET_BIT(PORTC,0);
     myI2CInit();
-    _delay_ms(20);
+    _delay_ms(120);
     myWiiInit();
     _delay_ms(1);
     fillReportWithWii();
@@ -273,13 +269,6 @@ void myInit(void) {
 
 
 /* ------------------------------------------------------------------------- */
-
-void abc(void*) __attribute__((signal));
-
-void abc(void* tmp) {
-    TOGGLE_BIT(PORTC,0);
-    my_timer_oneshot(1, abc, 0);
-}
 
 int main(void)
 {
@@ -299,7 +288,7 @@ int main(void)
 
     SET_BIT(DDRC, 0);
     // SET_BIT(PORTC,0);
-    my_timer_oneshot(500, abc, 0);
+    // my_timer_oneshot(500, abc, 0);
     // my_timer_abort();
     
 
@@ -325,9 +314,9 @@ int main(void)
         usbPoll();
         
         if (fillReportWithWii() == 1) {
-            // SET_BIT(PORTC,0);
+            SET_BIT(PORTC,0);
         } else {
-            // CLR_BIT(PORTC,0);
+            CLR_BIT(PORTC,0);
         }
         
         if(usbInterruptIsReady()){
@@ -340,6 +329,8 @@ int main(void)
             if ((rawData[0] == 0xff) && (rawData[1] == 0xff) && (rawData[2] == 0xff) && (rawData[3] == 0xff) && (rawData[4] == 0xff) && (rawData[5] == 0xff)) {
                 goto start;
             }
+
+
             
         }
     }

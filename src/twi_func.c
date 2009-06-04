@@ -5,14 +5,38 @@
 #include <avr/interrupt.h>
 #include "my_timers.h"
 
+
+#define WAIT_FOR_TWI(TIMEOUT) cli();\
+    timeout = 0;\
+    my_timer_oneshot((TIMEOUT), set_timeout, (void*)&timeout);\
+    sei();\
+    while (!(TWCR & (1<<TWINT))) {\
+        if (timeout) goto fend;\
+    }\
+    my_timer_abort();
+
+#define WAIT_FOR_TWI(TIMEOUT) while (!(TWCR & (1<<TWINT)));
+
+/*
+void set_timeout(void*) __attribute__((signal));
+
+void set_timeout(void* var) {
+    *(unsigned char*)var = 1;
+}
+*/
+
+
+
 unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
+    // volatile unsigned char timeout = 0;
     
     // enable TWI and send start condition
     TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
 
     // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
+    // while (!(TWCR & (1<<TWINT)));
+    WAIT_FOR_TWI(10);
 
     // check if start was sent
     if (((TWSR & 0xf8) != 0x08) && ((TWSR & 0xf8) != 0x10)) {
@@ -24,8 +48,8 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
     TWCR = (1<<TWINT) | (1<<TWEN);
 
     // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
+    WAIT_FOR_TWI(10);
+    
     if ((TWSR & 0xf8) != 0x18) {
         goto fend;
     }
@@ -36,7 +60,8 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
         TWCR = (1<<TWINT) | (1<<TWEN);
 
         // wait until it has been transmited
-        while (!(TWCR & (1<<TWINT)));
+        // while (!(TWCR & (1<<TWINT)));
+        WAIT_FOR_TWI(10);
 
         // check if data was acked by slave
         if ((TWSR & 0xf8) != 0x28) {
@@ -59,14 +84,15 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
 
 unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
-
+    // volatile unsigned char timeout = 0;
     
     // enable TWI and send start condition
     TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
 
     // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
+    // while (!(TWCR & (1<<TWINT)));
+    WAIT_FOR_TWI(10);
+    
     // check if start was sent
     if (((TWSR & 0xf8) != 0x08) && ((TWSR & 0xf8) != 0x10)) {
         goto fend;
@@ -76,8 +102,10 @@ unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned
     TWCR = (1<<TWINT) | (1<<TWEN);
 
     // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
+    // while (!(TWCR & (1<<TWINT)));
+    WAIT_FOR_TWI(10);
 
+    
     // check if start was sent
     if ((TWSR & 0xf8) != 0x40) {
         goto fend;
@@ -90,7 +118,8 @@ unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned
         TWCR = (1<<TWINT)|(1<<TWEA)|(1<<TWEN);
 
         // wait until it has been transmited
-        while (!(TWCR & (1<<TWINT)));
+        // while (!(TWCR & (1<<TWINT)));
+        WAIT_FOR_TWI(10);
 
         // check if data was received
         if ((TWSR & 0xf8) != 0x50) {
