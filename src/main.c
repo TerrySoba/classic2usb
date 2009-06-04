@@ -11,6 +11,9 @@
  * License: GNU GPL v2 (see License.txt), GNU GPL v3
  */
 
+#define TW_SCL 100000  // TWI frequency in Hz
+
+#include "twi_speed.h"
 
 #include <avr/io.h>
 #include <avr/wdt.h>
@@ -24,6 +27,7 @@
 #include "bit_tools.h"
 #include "twi_func.h"
 
+#include "my_timers.h"
 
 #define SLAVE_ADDR 0x52     /* address of classic controller */
 
@@ -84,6 +88,7 @@ PROGMEM char usbHidReportDescriptor[49] = {
 typedef struct {
     uchar   x;
     uchar   y;
+    // uint16_t debug;
     uchar   Rx;
     uchar   Ry;
 #ifdef WITH_ANALOG_L_R
@@ -131,36 +136,33 @@ usbRequest_t    *rq = (void *)data;
 
 /* I2C initialization */
 void myI2CInit(void) {
-    TWBR = 72; // this equals 100kHz on I2C
-
-    // set TWPS = 0;
-    CLR_BIT(TWSR, 0);
-    CLR_BIT(TWSR, 1);
+    twi_init(); // this is a macro from "twi_speed.h"
 }
 
 // initialize Wii controller
 unsigned char myWiiInit(void) {
     unsigned char buf[2] = {0x40, 0x00};
+
     return twi_send_data(SLAVE_ADDR, buf, 2);
 }
 
 
 unsigned char fillReportWithWii(void) {
     uchar i;
-
-    uchar rT, lT, rZ, lZ, up, down, left, right, start, select, home, a, b, x, y;
     unsigned char buf[6];
 
     /* send 0x00 to the controller to tell him we want data! */
     buf[0] = 0x00;
+    
     if (!twi_send_data(SLAVE_ADDR, buf, 1)) {
         goto fend;
     }
 
-    _delay_ms(1);
+    _delay_ms(2);
 
 
     // ------ now get 6 bytes of data
+    
     if (!(twi_receive_data(SLAVE_ADDR, buf, 6))) {
         goto fend;
     }
@@ -174,8 +176,14 @@ unsigned char fillReportWithWii(void) {
     // now set structure
     reportBuffer.x = ((rawData[0] & 0x3F))<<2;
     reportBuffer.y = 0xff - (((rawData[1] & 0x3F))<<2);
+    // reportBuffer.debug = ((F_CPU/((1024 * 1000))) * (500));
+
+    
     reportBuffer.Rx = ((((rawData[0] & 0xC0) >> 3) | ((rawData[1] & 0xC0) >> 5) | ((rawData[2] & 0x80) >> 7))) << 3;
     reportBuffer.Ry = 0xff - ((((rawData[2] & 0x1F))) << 3);
+
+    
+
 
 #ifdef WITH_ANALOG_L_R
     reportBuffer.leftTrig = (((rawData[2] & 0x60) >> 2) | ((rawData[3] & 0xE0) >> 5)) << 3;
@@ -189,72 +197,73 @@ unsigned char fillReportWithWii(void) {
     // reportBuffer.buttons2 = ~rawData[5];
 
     // split out buttons
-    rT       = GET_BIT(~rawData[4], 1);
-    start    = GET_BIT(~rawData[4], 2);
-    home     = GET_BIT(~rawData[4], 3);
-    select   = GET_BIT(~rawData[4], 4);
-    lT       = GET_BIT(~rawData[4], 5);
-    down     = GET_BIT(~rawData[4], 6);
-    right    = GET_BIT(~rawData[4], 7);
-    up       = GET_BIT(~rawData[5], 0);
-    left     = GET_BIT(~rawData[5], 1);
-    rZ       = GET_BIT(~rawData[5], 2);
-    x        = GET_BIT(~rawData[5], 3);
-    a        = GET_BIT(~rawData[5], 4);
-    y        = GET_BIT(~rawData[5], 5);
-    b        = GET_BIT(~rawData[5], 6);
-    lZ       = GET_BIT(~rawData[5], 7);
+    #define BTN_rT      GET_BIT(~rawData[4], 1)
+    #define BTN_start   GET_BIT(~rawData[4], 2)
+    #define BTN_home    GET_BIT(~rawData[4], 3)
+    #define BTN_select  GET_BIT(~rawData[4], 4)
+    #define BTN_lT      GET_BIT(~rawData[4], 5)
+    #define BTN_down    GET_BIT(~rawData[4], 6)
+    #define BTN_right   GET_BIT(~rawData[4], 7)
+    #define BTN_up      GET_BIT(~rawData[5], 0)
+    #define BTN_left    GET_BIT(~rawData[5], 1)
+    #define BTN_rZ      GET_BIT(~rawData[5], 2)
+    #define BTN_x       GET_BIT(~rawData[5], 3)
+    #define BTN_a       GET_BIT(~rawData[5], 4)
+    #define BTN_y       GET_BIT(~rawData[5], 5)
+    #define BTN_b       GET_BIT(~rawData[5], 6)
+    #define BTN_lZ      GET_BIT(~rawData[5], 7)
 
+    // button mappings (button 0..15)
+    #define BUTTON_X              0
+    #define BUTTON_A              1
+    #define BUTTON_B              2
+    #define BUTTON_Y              3
+    #define BUTTON_START          4
+    #define BUTTON_SELECT         5
+    #define BUTTON_HOME           6
+    #define BUTTON_RIGHT_TRIGGER  7
+    #define BUTTON_LEFT_TRIGGER   8
+    #define BUTTON_RIGHT_Z        9
+    #define BUTTON_LEFT_Z        10
+    #define BUTTON_UP            11
+    #define BUTTON_DOWN          12
+    #define BUTTON_LEFT          13
+    #define BUTTON_RIGHT         14
+    #define NO_BUTTON            15
 
-// button mappings (button 0..15)
-#define BUTTON_X              0
-#define BUTTON_A              1
-#define BUTTON_B              2
-#define BUTTON_Y              3
-#define BUTTON_START          4
-#define BUTTON_SELECT         5
-#define BUTTON_HOME           6
-#define BUTTON_RIGHT_TRIGGER  7
-#define BUTTON_LEFT_TRIGGER   8
-#define BUTTON_RIGHT_Z        9
-#define BUTTON_LEFT_Z        10
-#define BUTTON_UP            11
-#define BUTTON_DOWN          12
-#define BUTTON_LEFT          13
-#define BUTTON_RIGHT         14
-#define NO_BUTTON            15
+    #define SET_BUTTON(BUTTON, SOURCE) SET_BIT_VALUE(reportBuffer.buttons[BUTTON/8],BUTTON%8,SOURCE)
 
-#define SET_BUTTON(BUTTON, SOURCE) SET_BIT_VALUE(reportBuffer.buttons[BUTTON/8],BUTTON%8,SOURCE)
-
-    SET_BUTTON(BUTTON_X, x);
-    SET_BUTTON(BUTTON_A, a);
-    SET_BUTTON(BUTTON_B, b);
-    SET_BUTTON(BUTTON_Y, y);
-    SET_BUTTON(BUTTON_START, start);
-    SET_BUTTON(BUTTON_SELECT, select);
-    SET_BUTTON(BUTTON_HOME, home);
-    SET_BUTTON(BUTTON_RIGHT_TRIGGER, rT);
-    SET_BUTTON(BUTTON_LEFT_TRIGGER, lT);
-    SET_BUTTON(BUTTON_RIGHT_Z, rZ);
-    SET_BUTTON(BUTTON_LEFT_Z, lZ);
-    SET_BUTTON(BUTTON_UP, up);
-    SET_BUTTON(BUTTON_DOWN, down);
-    SET_BUTTON(BUTTON_LEFT, left);
-    SET_BUTTON(BUTTON_RIGHT, right);
+    SET_BUTTON(BUTTON_X, BTN_x);
+    SET_BUTTON(BUTTON_A, BTN_a);
+    SET_BUTTON(BUTTON_B, BTN_b);
+    SET_BUTTON(BUTTON_Y, BTN_y);
+    SET_BUTTON(BUTTON_START, BTN_start);
+    SET_BUTTON(BUTTON_SELECT, BTN_select);
+    SET_BUTTON(BUTTON_HOME, BTN_home);
+    SET_BUTTON(BUTTON_RIGHT_TRIGGER, BTN_rT);
+    SET_BUTTON(BUTTON_LEFT_TRIGGER, BTN_lT);
+    SET_BUTTON(BUTTON_RIGHT_Z, BTN_rZ);
+    SET_BUTTON(BUTTON_LEFT_Z, BTN_lZ);
+    SET_BUTTON(BUTTON_UP, BTN_up);
+    SET_BUTTON(BUTTON_DOWN, BTN_down);
+    SET_BUTTON(BUTTON_LEFT, BTN_left);
+    SET_BUTTON(BUTTON_RIGHT, BTN_right);
     SET_BUTTON(NO_BUTTON, 0);
 
-    return 0;
+    return 1;
 
     fend:
-    TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
-    return 1;
+    // TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
+    twi_stop();
+    return 0;
 }
 
 
 /* This function sets up stuff */
 void myInit(void) {
+    
     _delay_ms(300);
-    SET_BIT(DDRC, 0);
+    // SET_BIT(PORTC,0);
     myI2CInit();
     _delay_ms(20);
     myWiiInit();
@@ -265,11 +274,20 @@ void myInit(void) {
 
 /* ------------------------------------------------------------------------- */
 
+void abc(void*) __attribute__((signal));
+
+void abc(void* tmp) {
+    TOGGLE_BIT(PORTC,0);
+    my_timer_oneshot(1, abc, 0);
+}
+
 int main(void)
 {
     uchar   i;
     start:
-    wdt_enable(WDTO_1S);
+    cli();
+    wdt_enable(WDTO_2S);
+    // wdt_disable();
     /* Even if you don't use the watchdog, turn it off here. On newer devices,
      * the status of the watchdog (on/off, period) is PRESERVED OVER RESET!
      */
@@ -278,6 +296,12 @@ int main(void)
      * That's the way we need D+ and D-. Therefore we don't need any
      * additional hardware initialization.
      */
+
+    SET_BIT(DDRC, 0);
+    // SET_BIT(PORTC,0);
+    my_timer_oneshot(500, abc, 0);
+    // my_timer_abort();
+    
 
     odDebugInit();
     usbInit();
@@ -288,28 +312,35 @@ int main(void)
         _delay_ms(1);
     }
     usbDeviceConnect();
+    
     sei();
+    
     myInit();
+    
     DBG1(0x01, 0, 0);       /* debug output: main loop starts */
     for(;;){                /* main event loop */
+        
         DBG1(0x02, 0, 0);   /* debug output: main loop iterates */
         wdt_reset();
         usbPoll();
-        if (fillReportWithWii() == 0) {
-            SET_BIT(PORTC,0);
+        
+        if (fillReportWithWii() == 1) {
+            // SET_BIT(PORTC,0);
         } else {
-            CLR_BIT(PORTC,0);
+            // CLR_BIT(PORTC,0);
         }
-
+        
         if(usbInterruptIsReady()){
             /* called after every poll of the interrupt endpoint */
             DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 
             /* If the gamepad starts feeding us 0xff, we have to restart to recover */
+            
             if ((rawData[0] == 0xff) && (rawData[1] == 0xff) && (rawData[2] == 0xff) && (rawData[3] == 0xff) && (rawData[4] == 0xff) && (rawData[5] == 0xff)) {
                 goto start;
             }
+            
         }
     }
     return 0;

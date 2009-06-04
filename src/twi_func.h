@@ -1,6 +1,15 @@
 #ifndef INCLUDE_TWI_FUNC_H
 #define INCLUDE_TWI_FUNC_H
 
+// #include <stdint.h>
+#include <avr/io.h>
+
+/***** ATTENTION ***** ATTENTION ***** ATTENTION *****/
+/*                                                   */
+/* This code has only been tested with the ATMEGA 8  */
+/*                                                   */
+/***** ATTENTION ***** ATTENTION ***** ATTENTION *****/
+
 /*
  * Description:
  *  Use master-send mode to send data to slave with addresse 'addr'.

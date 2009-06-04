@@ -1,6 +1,9 @@
 #include "twi_func.h"
 
 #include <avr/io.h>
+#include <util/delay.h>     /* for _delay_ms() */
+#include <avr/interrupt.h>
+#include "my_timers.h"
 
 unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
@@ -56,6 +59,7 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
 
 unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
+
     
     // enable TWI and send start condition
     TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
