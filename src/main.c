@@ -1,6 +1,6 @@
 /* Name: main.c
  * Project: classic2usb, a Wii Classic Controller to USB adapter
- * Author: Torsten Stremlau
+ * Author: Torsten Stremlau <torsten@stremlau.de>
  * Creation Date: 2009-04-03
  * Tabsize: 4
  * This is largely based on the HID-Mouse example, so much of the code is
@@ -22,6 +22,8 @@
 #include "oddebug.h"        /* This is also an example for using debug macros */
 
 #include "bit_tools.h"
+#include "twi_func.h"
+
 
 #define SLAVE_ADDR 0x52     /* address of classic controller */
 
@@ -88,9 +90,9 @@ typedef struct {
     uchar   leftTrig;
     uchar   rightTrig;
 #endif
-    uchar   buttons1;
-    uchar   buttons2;
+    uchar   buttons[2];
 } report_t;
+
 
 uchar rawData[6];
 
@@ -127,9 +129,6 @@ usbRequest_t    *rq = (void *)data;
 
 /* ------------------------------------------------------------------------- */
 
-
-
-
 /* I2C initialization */
 void myI2CInit(void) {
     TWBR = 72; // this equals 100kHz on I2C
@@ -139,152 +138,36 @@ void myI2CInit(void) {
     CLR_BIT(TWSR, 1);
 }
 
-
-
-char myWiiInit(void) {
-
-    // enable TWI and send start condition
-    TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    // check if start was sent
-    if (((TWSR & 0xf8) != 0x08) && ((TWSR & 0xf8) != 0x10)) {
-        goto fend;
-    }
-
-    TWDR = (SLAVE_ADDR<<1) + 0; // WRITE MODE
-    TWCR = (1<<TWINT) | (1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    if ((TWSR & 0xf8) != 0x18) {
-        goto fend;
-    }
-
-    //  -------------  now initialize WII Classic Controller
-    TWDR = 0x40;
-    TWCR = (1<<TWINT) | (1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    if ((TWSR & 0xf8) != 0x28) {
-        goto fend;
-    }
-
-
-    TWDR = 0x00;
-    TWCR = (1<<TWINT) | (1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    if ((TWSR & 0xf8) != 0x28) {
-        goto fend;
-    }
-
-    // send stop
-    TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
-
-    return 0;
-
-    fend:
-    TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
-    return 1;
+// initialize Wii controller
+unsigned char myWiiInit(void) {
+    unsigned char buf[2] = {0x40, 0x00};
+    return twi_send_data(SLAVE_ADDR, buf, 2);
 }
 
 
-char fillReportWithWii(void) {
+unsigned char fillReportWithWii(void) {
     uchar i;
 
     uchar rT, lT, rZ, lZ, up, down, left, right, start, select, home, a, b, x, y;
+    unsigned char buf[6];
 
-    // enable TWI and send start condition
-    TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    // check if start was sent
-    if (((TWSR & 0xf8) != 0x08) && ((TWSR & 0xf8) != 0x10)) {
+    /* send 0x00 to the controller to tell him we want data! */
+    buf[0] = 0x00;
+    if (!twi_send_data(SLAVE_ADDR, buf, 1)) {
         goto fend;
     }
-
-    TWDR = (SLAVE_ADDR<<1) + 0; // WRITE MODE
-    TWCR = (1<<TWINT) | (1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    if ((TWSR & 0xf8) != 0x18) {
-        goto fend;
-    }
-
-    // --    now tell the controller we want some data!
-
-    TWDR = 0x00;
-    TWCR = (1<<TWINT) | (1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    if ((TWSR & 0xf8) != 0x28) {
-        goto fend;
-    }
-
-    TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
 
     _delay_ms(1);
 
+
     // ------ now get 6 bytes of data
-    // enable TWI and send start condition
-    TWCR = (1<<TWINT)|(1<<TWSTA)|(1<<TWEN);
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    // check if start was sent
-    if (((TWSR & 0xf8) != 0x08) && ((TWSR & 0xf8) != 0x10)) {
+    if (!(twi_receive_data(SLAVE_ADDR, buf, 6))) {
         goto fend;
     }
-
-    TWDR = (SLAVE_ADDR<<1) + 1; // READ MODE
-    TWCR = (1<<TWINT) | (1<<TWEN) /*| (1<<TWEA)*/;
-
-    // wait until it has been transmited
-    while (!(TWCR & (1<<TWINT)));
-
-    // check if start was sent
-    if ((TWSR & 0xf8) != 0x40) {
-        goto fend;
-    }
-
-    // send stop
-    // TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
-
-    // _delay_ms(1);
 
     for (i = 0; i < 6; i++) {
-
-        // get data
-        TWCR = (1<<TWINT)|(1<<TWEA)|(1<<TWEN);
-
-        // wait until it has been transmited
-        while (!(TWCR & (1<<TWINT)));
-
-        // check if data was received
-        if ((TWSR & 0xf8) != 0x50) {
-            goto fend;
-        }
-
-        rawData[i] = (TWDR ^ 0x17) + 0x17;
+        rawData[i] = (buf[i] ^ 0x17) + 0x17; // decrypt data
     }
-
-    // send stop
-    TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
 
     _delay_ms(1);
 
@@ -322,23 +205,43 @@ char fillReportWithWii(void) {
     b        = GET_BIT(~rawData[5], 6);
     lZ       = GET_BIT(~rawData[5], 7);
 
-    SET_BIT_VALUE(reportBuffer.buttons1,0,x);
-    SET_BIT_VALUE(reportBuffer.buttons1,1,a);
-    SET_BIT_VALUE(reportBuffer.buttons1,2,b);
-    SET_BIT_VALUE(reportBuffer.buttons1,3,y);
-    SET_BIT_VALUE(reportBuffer.buttons1,4,start);
-    SET_BIT_VALUE(reportBuffer.buttons1,5,select);
-    SET_BIT_VALUE(reportBuffer.buttons1,6,home);
-    SET_BIT_VALUE(reportBuffer.buttons1,7,rT);
-    
-    SET_BIT_VALUE(reportBuffer.buttons2,0,lT);
-    SET_BIT_VALUE(reportBuffer.buttons2,1,rZ);
-    SET_BIT_VALUE(reportBuffer.buttons2,2,lZ);
-    SET_BIT_VALUE(reportBuffer.buttons2,3,up);
-    SET_BIT_VALUE(reportBuffer.buttons2,4,down);
-    SET_BIT_VALUE(reportBuffer.buttons2,5,left);
-    SET_BIT_VALUE(reportBuffer.buttons2,6,right);
-    SET_BIT_VALUE(reportBuffer.buttons2,7,0);
+
+// button mappings (button 0..15)
+#define BUTTON_X              0
+#define BUTTON_A              1
+#define BUTTON_B              2
+#define BUTTON_Y              3
+#define BUTTON_START          4
+#define BUTTON_SELECT         5
+#define BUTTON_HOME           6
+#define BUTTON_RIGHT_TRIGGER  7
+#define BUTTON_LEFT_TRIGGER   8
+#define BUTTON_RIGHT_Z        9
+#define BUTTON_LEFT_Z        10
+#define BUTTON_UP            11
+#define BUTTON_DOWN          12
+#define BUTTON_LEFT          13
+#define BUTTON_RIGHT         14
+#define NO_BUTTON            15
+
+#define SET_BUTTON(BUTTON, SOURCE) SET_BIT_VALUE(reportBuffer.buttons[BUTTON/8],BUTTON%8,SOURCE)
+
+    SET_BUTTON(BUTTON_X, x);
+    SET_BUTTON(BUTTON_A, a);
+    SET_BUTTON(BUTTON_B, b);
+    SET_BUTTON(BUTTON_Y, y);
+    SET_BUTTON(BUTTON_START, start);
+    SET_BUTTON(BUTTON_SELECT, select);
+    SET_BUTTON(BUTTON_HOME, home);
+    SET_BUTTON(BUTTON_RIGHT_TRIGGER, rT);
+    SET_BUTTON(BUTTON_LEFT_TRIGGER, lT);
+    SET_BUTTON(BUTTON_RIGHT_Z, rZ);
+    SET_BUTTON(BUTTON_LEFT_Z, lZ);
+    SET_BUTTON(BUTTON_UP, up);
+    SET_BUTTON(BUTTON_DOWN, down);
+    SET_BUTTON(BUTTON_LEFT, left);
+    SET_BUTTON(BUTTON_RIGHT, right);
+    SET_BUTTON(NO_BUTTON, 0);
 
     return 0;
 
