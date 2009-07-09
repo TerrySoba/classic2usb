@@ -11,7 +11,7 @@
  * License: GNU GPL v2 (see License.txt), GNU GPL v3
  */
 
-#define TW_SCL 100000  // TWI frequency in Hz
+#define TW_SCL 100000// TWI frequency in Hz
 
 #include "twi_speed.h"
 
@@ -29,7 +29,7 @@
 
 // #include "my_timers.h"
 
-#define SLAVE_ADDR 0x52     /* address of classic controller */
+#define SLAVE_ADDR 0x52     /* address of classic controller and nunchuck */
 
 
 /* ------------------------------------------------------------------------- */
@@ -159,7 +159,7 @@ unsigned char fillReportWithWii(void) {
     }
 
     _delay_ms(2);
-
+    // _delay_us(100);
 
     // ------ now get 6 bytes of data
     
@@ -167,11 +167,12 @@ unsigned char fillReportWithWii(void) {
         goto fend;
     }
 
-    for (i = 0; i < 6; i++) {
+    // for (i = 0; i < 6; i++) {
+     for (i = 0; i < 6; i++) {
         rawData[i] = (buf[i] ^ 0x17) + 0x17; // decrypt data
     }
 
-    _delay_ms(1);
+    // _delay_ms(1);
 
     // now set structure
     reportBuffer.x = ((rawData[0] & 0x3F))<<2;
@@ -250,6 +251,11 @@ unsigned char fillReportWithWii(void) {
 
     fend:
     // TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
+    _delay_us(20);
+
+
+    all_fine:
+    
     twi_stop();
     return 0;
 }
@@ -290,7 +296,6 @@ int main(void)
     // SET_BIT(PORTC,0);
     // my_timer_oneshot(500, abc, 0);
     // my_timer_abort();
-    
 
     odDebugInit();
     usbInit();
@@ -301,37 +306,30 @@ int main(void)
         _delay_ms(1);
     }
     usbDeviceConnect();
-    
     sei();
-    
     myInit();
-    
     DBG1(0x01, 0, 0);       /* debug output: main loop starts */
+
     for(;;){                /* main event loop */
-        
         DBG1(0x02, 0, 0);   /* debug output: main loop iterates */
         wdt_reset();
         usbPoll();
-        
         if (fillReportWithWii() == 1) {
             SET_BIT(PORTC,0);
         } else {
             CLR_BIT(PORTC,0);
         }
-        
+        // TOGGLE_BIT(PORTC,0);
+        // twi_stop();
         if(usbInterruptIsReady()){
             /* called after every poll of the interrupt endpoint */
             DBG1(0x03, 0, 0);   /* debug output: interrupt report prepared */
             usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 
             /* If the gamepad starts feeding us 0xff, we have to restart to recover */
-            
             if ((rawData[0] == 0xff) && (rawData[1] == 0xff) && (rawData[2] == 0xff) && (rawData[3] == 0xff) && (rawData[4] == 0xff) && (rawData[5] == 0xff)) {
                 goto start;
             }
-
-
-            
         }
     }
     return 0;

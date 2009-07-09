@@ -8,6 +8,7 @@
 /*                                                   */
 /***** ATTENTION ***** ATTENTION ***** ATTENTION *****/
 
+#include <stdint.h>
 
 #include "bit_tools.h"
 
@@ -16,10 +17,10 @@
 #endif
 
 // define every possible value of TWPS
-#define _TWBR_0 ((F_CPU - 16 * TW_SCL) / (2 * 1 * TW_SCL))
-#define _TWBR_1 ((F_CPU - 16 * TW_SCL) / (2 * 4 * TW_SCL))
-#define _TWBR_2 ((F_CPU - 16 * TW_SCL) / (2 * 16 * TW_SCL))
-#define _TWBR_3 ((F_CPU - 16 * TW_SCL) / (2 * 64 * TW_SCL))
+#define _TWBR_0 ((F_CPU - 16ul * TW_SCL) / (2ul * 1ul * TW_SCL))
+#define _TWBR_1 ((F_CPU - 16ul * TW_SCL) / (2ul * 4ul * TW_SCL))
+#define _TWBR_2 ((F_CPU - 16ul * TW_SCL) / (2ul * 16ul * TW_SCL))
+#define _TWBR_3 ((F_CPU - 16ul * TW_SCL) / (2ul * 64ul * TW_SCL))
 
 // now check if any TWPS leads to a possible value for TWBR
 #if ((_TWBR_0 < 0xff) && (_TWBR_0 > 0))

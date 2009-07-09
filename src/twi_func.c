@@ -5,30 +5,19 @@
 #include <avr/interrupt.h>
 #include "my_timers.h"
 
+#include "bit_tools.h"
 
-#define WAIT_FOR_TWI(TIMEOUT) cli();\
-    timeout = 0;\
-    my_timer_oneshot((TIMEOUT), set_timeout, (void*)&timeout);\
-    sei();\
-    while (!(TWCR & (1<<TWINT))) {\
-        if (timeout) goto fend;\
-    }\
-    my_timer_abort();
+#define WAIT_FOR_TWI(TIMEOUT) {\
+                                 long int tmp_n = 0;\
+                                 while (!(TWCR & (1<<TWINT)) && (tmp_n < 100000)) tmp_n++;\
+                                 if (!(TWCR & (1<<TWINT))) { SET_BIT(TWCR, TWINT); goto fend; }\
+                              }
 
-#define WAIT_FOR_TWI(TIMEOUT) while (!(TWCR & (1<<TWINT)));
-
-/*
-void set_timeout(void*) __attribute__((signal));
-
-void set_timeout(void* var) {
-    *(unsigned char*)var = 1;
-}
-*/
-
-
+// #define WAIT_FOR_TWI(TIMEOUT) while (!(TWCR & (1<<TWINT)));
 
 unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
+    // long int n;
     // volatile unsigned char timeout = 0;
     
     // enable TWI and send start condition
@@ -53,6 +42,8 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
     if ((TWSR & 0xf8) != 0x18) {
         goto fend;
     }
+
+    // _delay_us(20);
 
     // now send data
     for (i = 0; i < len; i++) {
@@ -84,6 +75,7 @@ unsigned char twi_send_data(unsigned char addr, unsigned char* data, unsigned ch
 
 unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned char len) {
     unsigned char i;
+    // long int n;
     // volatile unsigned char timeout = 0;
     
     // enable TWI and send start condition
@@ -112,7 +104,7 @@ unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned
     }
 
     // now get data
-    for (i = 0; i < 6; i++) {
+    for (i = 0; i < len; i++) {
 
         // get data
         TWCR = (1<<TWINT)|(1<<TWEA)|(1<<TWEN);
@@ -142,4 +134,5 @@ unsigned char twi_receive_data(unsigned char addr, unsigned char* data, unsigned
 
 void twi_stop(void) {
     TWCR = (1<<TWINT)|(1<<TWEN)|(1<<TWSTO);
+    _delay_us(10);
 }
