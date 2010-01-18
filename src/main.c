@@ -105,6 +105,31 @@ static report_t reportBuffer;
 static uchar    idleRate;   /* repeat rate for keyboards, never used for mice */
 // static uchar    startByte = 0;
 
+/* Calibration values for the analog sticks and triggers */
+
+#define INITIAL_XMAX 100
+#define INITIAL_XMIN -100
+#define INITIAL_YMAX 100
+#define INITIAL_YMIN -100
+#define INITIAL_RXMAX 100
+#define INITIAL_RXMIN -100
+#define INITIAL_RYMAX 100
+#define INITIAL_RYMIN -100
+
+typedef struct {
+    signed char xMax;
+    signed char xMin;
+    signed char yMax;
+    signed char yMin;
+    signed char RxMax;
+    signed char RxMin;
+    signed char RyMax;
+    signed char RyMin;
+} calibration_t;
+
+static calibration_t calibration;
+
+
 /* ------------------------------------------------------------------------- */
 
 usbMsgLen_t usbFunctionSetup(uchar data[8])
@@ -168,20 +193,61 @@ unsigned char fillReportWithWii(void) {
     }
 
     // for (i = 0; i < 6; i++) {
-     for (i = 0; i < 6; i++) {
+    for (i = 0; i < 6; i++) {
         rawData[i] = (buf[i] ^ 0x17) + 0x17; // decrypt data
     }
 
     // _delay_ms(1);
-
-    // now set structure
-    reportBuffer.x = ((rawData[0] & 0x3F))<<2;
-    reportBuffer.y = 0xff - (((rawData[1] & 0x3F))<<2);
-
-    reportBuffer.Rx = ((((rawData[0] & 0xC0) >> 3) | ((rawData[1] & 0xC0) >> 5) | ((rawData[2] & 0x80) >> 7))) << 3;
-    reportBuffer.Ry = 0xff - ((((rawData[2] & 0x1F))) << 3);
-
-
+    
+    // 128 is center ??
+    
+    // FIXME: Do this calibration stuff with less duplicate code...
+    //        Maybe don't use float math, its slow and big
+    
+    // calculation for x-axis
+    signed char x = (((rawData[0] & 0x3F))<<2) - 128;
+    if (x > calibration.xMax) calibration.xMax = x;
+    if (x < calibration.xMin) calibration.xMin = x;
+    
+    if (x > 0) {
+        reportBuffer.x = x * (127.0 / calibration.xMax) + 128;
+    } else {
+        reportBuffer.x = x * (128.0 / (-calibration.xMin)) + 128;
+    }
+    
+    // calculation for y-axis
+    signed char y = 0xff - (((rawData[1] & 0x3F))<<2) - 128;
+    if (y > calibration.yMax) calibration.yMax = y;
+    if (y < calibration.yMin) calibration.yMin = y;
+    
+    if (y > 0) {
+        reportBuffer.y = y * (127.0 / calibration.yMax) + 128;
+    } else {
+        reportBuffer.y = y * (128.0 / (-calibration.yMin)) + 128;
+    }
+    
+    // calculation for Rx-axis
+    signed char Rx = (((((rawData[0] & 0xC0) >> 3) | ((rawData[1] & 0xC0) >> 5) | ((rawData[2] & 0x80) >> 7))) << 3) - 128;
+    if (Rx > calibration.RxMax) calibration.RxMax = Rx;
+    if (Rx < calibration.RxMin) calibration.RxMin = Rx;
+    
+    if (Rx > 0) {
+        reportBuffer.Rx = Rx * (127.0 / calibration.RxMax) + 128;
+    } else {
+        reportBuffer.Rx = Rx * (128.0 / (-calibration.RxMin)) + 128;
+    }
+   
+    // calculation for Ry-axis
+    signed char Ry = (0xff - ((((rawData[2] & 0x1F))) << 3)) - 128;
+    if (Ry > calibration.RyMax) calibration.RyMax = Ry;
+    if (Ry < calibration.RyMin) calibration.RyMin = Ry;
+    
+    if (Ry > 0) {
+        reportBuffer.Ry = Ry * (127.0 / calibration.RyMax) + 128;
+    } else {
+        reportBuffer.Ry = Ry * (128.0 / (-calibration.RyMin)) + 128;
+    }
+    
 #ifdef WITH_ANALOG_L_R
     reportBuffer.leftTrig = (((rawData[2] & 0x60) >> 2) | ((rawData[3] & 0xE0) >> 5)) << 3;
     reportBuffer.rightTrig = (rawData[3] & 0x1F) << 3;
@@ -263,6 +329,15 @@ unsigned char fillReportWithWii(void) {
 
 /* This function sets up stuff */
 void myInit(void) {
+    // initialize calibration values
+    calibration.xMax = INITIAL_XMAX;
+    calibration.xMin = INITIAL_XMIN;
+    calibration.yMax = INITIAL_YMAX;
+    calibration.yMin = INITIAL_YMIN;
+    calibration.RxMax = INITIAL_RXMAX;
+    calibration.RxMin = INITIAL_RXMIN;
+    calibration.RyMax = INITIAL_RYMAX;
+    calibration.RyMin = INITIAL_RYMIN;
     
     _delay_ms(300);
     // SET_BIT(PORTC,0);
